@@ -3,19 +3,21 @@ const app = express();
 const http = require('http').Server(app);
 const io = require('socket.io')(http, {
   cors: {
-    origin: 'http://localhost:5173',
+    origin: 'http://localhost:5173', // Replace with the actual URL of your frontend
     methods: ['GET', 'POST'],
     credentials: true,
   },
 });
 const Speechmatics = require('speechmatics');
+const cors = require('cors');
 const dotenv = require('dotenv');
 dotenv.config();
 
-const apiKey = process.env.API_KEY; 
+const apiKey = process.env.API_KEY;
 const realtimeSession = new Speechmatics.RealtimeSession({ apiKey });
 
 app.use(express.json());
+app.use(cors());
 
 io.on('connection', (socket) => {
   socket.on('start-recording', () => {
@@ -40,7 +42,11 @@ io.on('connection', (socket) => {
   });
 
   socket.on('audio-data', (data) => {
-    realtimeSession.sendAudio(data);
+    try {
+      realtimeSession.sendAudio(data);
+    } catch (error) {
+      console.log('Error sending audio:', error);
+    }
   });
 
   socket.on('stop-recording', () => {

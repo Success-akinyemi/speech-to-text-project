@@ -1,6 +1,6 @@
 import './App.css';
 import { Component } from 'react';
-import io from 'socket.io-client';
+import { RealtimeSession } from 'speechmatics';
 
 class App extends Component {
   constructor(props) {
@@ -11,7 +11,8 @@ class App extends Component {
       pause: false,
     };
 
-    this.socket = io('http://localhost:9000'); 
+    this.apikey = import.meta.env.VITE_API_KEY;
+    this.realtimeSession = new RealtimeSession({ apiKey: this.apikey });
     this.mediaRecorder = null;
   }
 
@@ -25,9 +26,25 @@ class App extends Component {
   };
 
   startRecording = () => {
-    this.setState({ recording: true, pause: false });
-    this.socket.emit('start-recording');
-    this.setupMediaRecorder();
+    this.realtimeSession
+      .start({
+        message: 'StartRecognition',
+        transcription_config: {
+          language: 'en',
+          operating_point: 'enhanced',
+          enable_partials: true,
+          output_locale: 'en-US',
+          diarization: 'speaker',
+          max_delay: 2,
+        },
+      })
+      .then(() => {
+        this.setState({ recording: true, pause: false });
+        this.setupMediaRecorder();
+      })
+      .catch((error) => {
+        console.log('ERROR STARTING THE SESSION:', error);
+      });
   };
 
   pauseRecording = () => {
@@ -48,7 +65,7 @@ class App extends Component {
     if (this.mediaRecorder) {
       this.mediaRecorder.stop();
     }
-    this.socket.emit('stop-recording');
+    this.realtimeSession.stop();
     this.setState({ recording: false, pause: false });
   };
 
@@ -61,35 +78,29 @@ class App extends Component {
     });
 
     this.mediaRecorder.ondataavailable = (event) => {
+      console.log('DATA', event.data);
       if (event.data.size > 0) {
-        this.socket.emit('audio-data', event.data);
+        this.realtimeSession.sendAudio(event.data);
       }
     };
 
     this.mediaRecorder.onstop = () => {
       if (this.state.recording) {
-        this.socket.emit('stop-recording');
+        this.realtimeSession.start();
       }
     };
-
     this.mediaRecorder.start(500);
   };
 
   componentDidMount() {
-    this.socket.on('transcription-started', () => {
-      console.log('Transcription started');
-    });
-
-    this.socket.on('transcription-update', (transcription) => {
-      this.setState((prevState) => ({
-        transcript: prevState.transcript + transcription + ' ',
-      }));
-    });
+    this.realtimeSession.addListener('AddTranscript', this.eventListeners.addTranscript);
+    this.realtimeSession.addListener('EndOfTranscript', this.eventListeners.endOfTranscript);
   }
 
   componentWillUnmount() {
-    this.socket.off('transcription-started');
-    this.socket.off('transcription-update');
+    //Remove event listeners to prevent duplicate message
+    this.realtimeSession.removeListener('AddTranscript', this.eventListeners.addTranscript);
+    this.realtimeSession.removeListener('EndOfTranscript', this.eventListeners.endOfTranscript);
   }
 
   render() {
@@ -118,6 +129,7 @@ class App extends Component {
           placeholder='Transcription Output...'
           style={{ color: 'black' }}
         ></textarea>
+        {console.log('TRANS', this.state)}
       </div>
     );
   }
