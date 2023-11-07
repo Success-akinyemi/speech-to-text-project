@@ -9,6 +9,7 @@ class App extends Component {
       transcript: '',
       recording: false,
       pause: false,
+      editMode: false, // To enable editing
     };
 
     this.apikey = import.meta.env.VITE_API_KEY;
@@ -26,25 +27,23 @@ class App extends Component {
   };
 
   startRecording = () => {
-    this.realtimeSession
-      .start({
-        message: 'StartRecognition',
-        transcription_config: {
-          language: 'en',
-          operating_point: 'enhanced',
-          enable_partials: true,
-          output_locale: 'en-US',
-          diarization: 'speaker',
-          max_delay: 2,
-        },
-      })
-      .then(() => {
-        this.setState({ recording: true, pause: false });
-        this.setupMediaRecorder();
-      })
-      .catch((error) => {
-        console.log('ERROR STARTING THE SESSION:', error);
-      });
+    this.setState({ recording: true, pause: false, editMode: false, transcript: '' });
+    this.realtimeSession.start({
+      message: 'StartRecognition',
+      transcription_config: {
+        language: 'en',
+        operating_point: 'enhanced',
+        enable_partials: true,
+        output_locale: 'en-US',
+        diarization: 'speaker',
+        max_delay: 2,
+      },
+    }).then((data) => {
+      console.log('DATA', data)
+      this.setupMediaRecorder();
+    }).catch((error) => {
+      console.log('ERROR STARTING THE SESSION:', error);
+    });
   };
 
   pauseRecording = () => {
@@ -66,7 +65,12 @@ class App extends Component {
       this.mediaRecorder.stop();
     }
     this.realtimeSession.stop();
-    this.setState({ recording: false, pause: false });
+    this.setState({ recording: false, pause: false, editMode: true });
+  };
+
+  saveToDatabase = () => {
+    const transcribeData = this.state.transcript;
+    console.log('YOUR TRANSCRIBED DATA', transcribeData);
   };
 
   setupMediaRecorder = async () => {
@@ -78,7 +82,6 @@ class App extends Component {
     });
 
     this.mediaRecorder.ondataavailable = (event) => {
-      console.log('DATA', event.data);
       if (event.data.size > 0) {
         this.realtimeSession.sendAudio(event.data);
       }
@@ -98,38 +101,43 @@ class App extends Component {
   }
 
   componentWillUnmount() {
-    //Remove event listeners to prevent duplicate message
     this.realtimeSession.removeListener('AddTranscript', this.eventListeners.addTranscript);
     this.realtimeSession.removeListener('EndOfTranscript', this.eventListeners.endOfTranscript);
   }
 
   render() {
     return (
-      <div className='App'>
+      <div className="App">
         <div>
           {this.state.recording ? (
             <div>
               {this.state.pause ? (
-                <button onClick={this.continueRecording}>Continue Recording</button>
+                <button onClick={this.continueRecording}>
+                  Continue Recording
+                </button>
               ) : (
                 <button onClick={this.pauseRecording}>Pause Recording</button>
               )}
               <button onClick={this.stopRecording}>Stop Recording</button>
             </div>
           ) : (
-            <button onClick={this.startRecording}>Start Recording</button>
+            <div>
+              <button onClick={this.startRecording}>Start Recording</button>
+              {this.state.transcript && (
+                <button onClick={this.saveToDatabase}>Save to Database</button>
+              )}
+            </div>
           )}
         </div>
 
         <textarea
-          cols='50'
-          rows='10'
+          cols="50"
+          rows="10"
           value={this.state.transcript}
-          readOnly
-          placeholder='Transcription Output...'
-          style={{ color: 'black' }}
+          readOnly={!this.state.recording && !this.state.editMode}
+          placeholder="Transcription Output..."
+          style={{ color: "black" }}
         ></textarea>
-        {console.log('TRANS', this.state)}
       </div>
     );
   }
