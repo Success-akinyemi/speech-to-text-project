@@ -1,6 +1,6 @@
-import './App.css';
-import { Component } from 'react';
+import React, { Component } from 'react';
 import { RealtimeSession } from 'speechmatics';
+import axios from 'axios';
 
 class App extends Component {
   constructor(props) {
@@ -9,27 +9,34 @@ class App extends Component {
       transcript: '',
       recording: false,
       pause: false,
-      editMode: false, // To enable editing
+      editMode: false,
+      apiKey: null, // Store the API key
     };
 
-    this.apikey = import.meta.env.VITE_API_KEY;
-    this.realtimeSession = new RealtimeSession({ apiKey: this.apikey });
+    this.realtimeSession = null;
     this.mediaRecorder = null;
   }
 
   eventListeners = {
     addTranscript: (message) => {
-      this.setState((prevState) => ({ transcript: prevState.transcript + message.metadata.transcript + ' ' }));
+      this.setState((prevState) => ({
+        transcript: prevState.transcript + message.metadata.transcript + ' ',
+      }));
     },
     endOfTranscript: () => {
-      this.setState((prevState) => ({ transcript: prevState.transcript + '\n' }));
+      this.setState((prevState) => ({
+        transcript: prevState.transcript + '\n',
+      }));
     },
   };
 
   startRecording = () => {
     this.setState({ recording: true, pause: false, editMode: false, transcript: '' });
+
+    // Start RealtimeSession with the API key from the state
     this.realtimeSession.start({
       message: 'StartRecognition',
+      apiKey: this.state.apiKey, // Pass the API key here
       transcription_config: {
         language: 'en',
         operating_point: 'enhanced',
@@ -39,10 +46,10 @@ class App extends Component {
         max_delay: 2,
       },
     }).then((data) => {
-      console.log('DATA', data)
+      console.log('DATA', data);
       this.setupMediaRecorder();
     }).catch((error) => {
-      console.log('ERROR STARTING THE SESSION:', error);
+      console.error('ERROR STARTING THE SESSION:', error);
     });
   };
 
@@ -95,14 +102,32 @@ class App extends Component {
     this.mediaRecorder.start(500);
   };
 
+  // Function to get the latest API key from your backend
+  getLatestApiKey = async () => {
+    try {
+      const response = await axios.get('http://localhost:9000/api/get-api-key'); // Replace with your API route
+      this.setState({ apiKey: response?.data.apiKey }, () => {
+        // Initialize RealtimeSession with the obtained API key
+        this.realtimeSession = new RealtimeSession({ apiKey: this.state.apiKey });
+        this.realtimeSession.addListener('AddTranscript', this.eventListeners.addTranscript);
+        this.realtimeSession.addListener('EndOfTranscript', this.eventListeners.endOfTranscript);
+      });
+      console.log('TOKEN', response?.data.apiKey);
+    } catch (error) {
+      console.error('Error getting the latest API key:', error);
+    }
+  };
+
   componentDidMount() {
-    this.realtimeSession.addListener('AddTranscript', this.eventListeners.addTranscript);
-    this.realtimeSession.addListener('EndOfTranscript', this.eventListeners.endOfTranscript);
+    // Get the latest API key when the component mounts
+    this.getLatestApiKey();
   }
 
   componentWillUnmount() {
-    this.realtimeSession.removeListener('AddTranscript', this.eventListeners.addTranscript);
-    this.realtimeSession.removeListener('EndOfTranscript', this.eventListeners.endOfTranscript);
+    if (this.realtimeSession) {
+      this.realtimeSession.removeListener('AddTranscript', this.eventListeners.addTranscript);
+      this.realtimeSession.removeListener('EndOfTranscript', this.eventListeners.endOfTranscript);
+    }
   }
 
   render() {
@@ -136,7 +161,7 @@ class App extends Component {
           value={this.state.transcript}
           readOnly={!this.state.recording && !this.state.editMode}
           placeholder="Transcription Output..."
-          style={{ color: "black" }}
+          style={{ color: 'black' }}
         ></textarea>
       </div>
     );
