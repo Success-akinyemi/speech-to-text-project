@@ -24,7 +24,7 @@ const apiKeysSchema = new mongoose.Schema({
 const ApiKey = mongoose.model('speechToTextJwtToken', apiKeysSchema);
 
 // Schedule a job to run every 50 minutes
-const job = schedule.scheduleJob('*/2 * * * *', async () => {
+const job = schedule.scheduleJob('*/50 * * * *', async () => {
   try {
     // Send a POST request to speechmatics to get a key
     const response = await axios.post(
